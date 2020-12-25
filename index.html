@@ -1,0 +1,319 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- PLEASE NO CHANGES BELOW THIS LINE (UNTIL I SAY SO) -->
+    <!--    <script language="javascript" type="text/javascript" src="lib/three.min.js"></script>-->
+
+    <!-- OK, YOU CAN MAKE CHANGES BELOW THIS LINE AGAIN -->
+    <link href="https://fonts.googleapis.com/css2?family=Muli:wght@300;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            text-align: center;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="initScreen" style="position: absolute; width: 100%; height:100%; text-align: center;font-size: 30px;font-family: 'Muli'; color:#555555; cursor: pointer; padding-top: 20%; background-color: white; z-index: 100000">
+        Start</div>
+</body>
+
+</html>
+<script type="module">
+    import * as THREE from './lib/three.module.js';
+    import { OrbitControls } from './lib/OrbitControls.js';
+    import { GLTFExporter } from './lib/GLTFExporter.js';
+    
+    let seed=777;
+    var volumeThreshold = 1;
+    var values = 0;
+    var average = 0;
+    var array = [];
+    var storeArray = [];
+    var pause = [];
+    var audioContext;
+    var analyser;
+    var microphone;
+    var javascriptNode;
+    var count=256;
+    var spacing=0.01;
+    var scale=0.01;
+    var maxSize=Math.floor(rnd()*250) + 150  ;
+    var elementWidth=rnd()/2;
+    var speed=0.1;
+    var radius=14;
+    var theta=(1/(count/2))*Math.PI-rnd()*14;
+    var sensitivity=0.1;
+    var cumulative=true;
+    var rec;
+    var audioChunks=[];
+    let blob;
+    var doOnce=false;
+    var palette=["rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
+                 0xFFFFFF,
+                 "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
+                 "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
+                 "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
+                 "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")"];
+   
+    //Microphone initialisation and data processing
+    for (var i = 0; i < count; i++) {
+        storeArray[i] = 0.2;
+    }
+    document.getElementById("initScreen").addEventListener('click', startNow);
+    function startNow() {
+        document.getElementById("initScreen").style.display="none";
+        navigator.getUserMedia = ( navigator.getUserMedia ||
+                                  navigator.webkitGetUserMedia ||
+                                  navigator.mozGetUserMedia ||
+                                  navigator.msGetUserMedia);
+
+        if (typeof navigator.mediaDevices.getUserMedia === 'undefined') {
+            navigator.getUserMedia({
+                audio: true
+            },function(stream){
+                streamProcess(stream);},function(error){console.log("Error: "+error)});
+        }
+        else{
+            navigator.mediaDevices.getUserMedia({
+                audio: true
+            }).then(function(stream) {
+                streamProcess(stream);});
+        }
+    }
+    function streamProcess(stream) {
+        var AudioContext = window.AudioContext ||
+            window.webkitAudioContext;
+        audioContext = new AudioContext();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        javascriptNode = audioContext.createScriptProcessor(1024, 1, 1);
+        analyser.smoothingTimeConstant = 0.0;
+        analyser.fftSize = 512;
+        microphone.connect(analyser);
+        analyser.connect(javascriptNode);
+        javascriptNode.connect(audioContext.destination);
+
+        //Recording
+        rec = new MediaRecorder(stream);
+        rec.ondataavailable = e => {
+            audioChunks.push(e.data);
+            if (rec.state == "inactive"){
+                blob = new Blob(audioChunks,{type:"audio/ogg"});
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = "Audio.ogg";
+                a.click();
+                window.URL.revokeObjectURL(url);
+            }
+        }
+        rec.start();
+        setTimeout(() => {
+            rec.stop();
+        }, 60000);
+
+
+        //FFT processing
+        javascriptNode.onaudioprocess = function() {
+            array = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(array);
+            var values = 0;
+            array=array.slice(0,Math.floor(array.length/2));
+            var length = array.length;
+            for (var i = 0; i < length; i++) {
+                values += array[i];
+            }
+            average = values / length;
+            if (cumulative){
+                for (var i = 0; i < count; i++) {
+                    if (average > volumeThreshold) {
+                        if(storeArray[i]>maxSize){
+                            storeArray[i]=storeArray[i]-maxSize;
+                        }
+                        else{
+                            storeArray[i] += array[Math.floor(i/(count/length))]*sensitivity;
+                        }
+                    }
+                }
+            }
+            else{
+                for (var i = 0; i < count; i++) {
+                    if (average > volumeThreshold) {
+                        storeArray[i] = array[Math.floor(i/(count/length))];
+                    }
+                }
+            }
+        }
+    }
+
+    //Scene and geometry creation
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+    var viewAngle = 30;
+    var nearClipping = 0.1;
+    var farClipping = 9999;
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(palette[0]);
+    var camera = new THREE.PerspectiveCamera(viewAngle, width / height, nearClipping, farClipping);
+    var renderer = new THREE.WebGLRenderer({
+        antialias:true
+    });
+    var group= new THREE.Group();
+    renderer.setSize(width, height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    //Main directional light
+    var directionalLight = new THREE.DirectionalLight(palette[1], 1);
+    directionalLight.castShadow = true;
+    directionalLight.position.set(0, 50, 50);
+    directionalLight.target.position.set(0, 0, 0);
+    directionalLight.shadow.mapSize.width = 512; 
+    directionalLight.shadow.mapSize.height = 512; 
+    directionalLight.shadow.camera.near = 0.1;
+    directionalLight.shadow.camera.far = 500;
+    group.add(directionalLight);
+    group.add(directionalLight.target);
+    var d = 40;
+    directionalLight.shadow.camera.left = -d;
+    directionalLight.shadow.camera.right = d;
+    directionalLight.shadow.camera.top = d;
+    directionalLight.shadow.camera.bottom = -d
+
+    //Central Sphere
+    var sphereMaterial = new THREE.MeshLambertMaterial({
+        emissive: palette[2]
+    });
+    var sphereGeometry = new THREE.SphereGeometry(1, 16, 16);
+    var central = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    central.castShadow=true;
+    group.add(central);
+
+    //Diagonal Line
+    var hrCylMat = new THREE.MeshLambertMaterial( {color: palette[3]} );
+    var hrCyl = new THREE.CylinderGeometry( 0.1, 0.1, 40, 18 );
+    var hr = new THREE.Mesh(hrCyl, hrCylMat);
+    hr.castShadow = true;
+    hr.rotateZ( 0.2);
+    group.add(hr);
+
+    //Table
+    var tableMat = new THREE.MeshLambertMaterial( {color: palette[4]} );
+    var tableGeo = new THREE.CylinderGeometry( 30, 30, 2, 32);
+    var table = new THREE.Mesh(tableGeo, tableMat);
+    table.position.y=-21;
+    table.receiveShadow=true;
+    group.add(table);
+
+    //Feathers
+    var elements = []
+    var cylinderMaterial = new THREE.MeshStandardMaterial({
+        roughness: 0.4,
+        metalness: 0.55,
+        color:palette[5]
+    });
+    var cylinderGeometry = new THREE.CylinderGeometry( 1, 1, elementWidth, 24 );
+    const map = (num, in_min, in_max, out_min, out_max) => {
+        return (num - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    }
+    for (var i = 0; i < count; i++) {
+        elements[i] = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+        var angle=(i / (count/2)) * Math.PI;
+        elements[i].position.y =radius*Math.cos(angle);
+        elements[i].position.x =radius*Math.sin(angle);
+        elements[i].rotateZ(theta);
+        elements[i].castShadow = true;
+        elements[i].receiveShadow = true;
+        group.add(elements[i]);
+
+    }
+    scene.add(group);
+    
+    //OrbitControls
+    var controls = new OrbitControls( camera, renderer.domElement );
+    controls.enableDamping = true; 
+    controls.dampingFactor = 0.5;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 100;
+    controls.maxDistance = 500;
+    controls.maxPolarAngle = Math.PI / 2;
+    camera.position.set( 0, 20, 100 );
+    controls.update();
+
+    //Animate function
+    renderer.animate( () => {
+        for (var i = 0; i < count; i++) {
+            if (i<count/2){
+                var rad = storeArray[i*2] * scale * speed + elements[i].scale.x * (1-speed);
+                elements[i].scale.x = rad;
+                elements[i].scale.z = rad;
+            }
+            else{
+                var rad = storeArray[(i-count/2)*2] * scale * speed + elements[i].scale.z * (1-speed);
+                elements[i].scale.x = rad;
+                elements[i].scale.z = rad;
+            }
+        }
+        controls.update();
+        renderer.render(scene, camera);
+    });
+
+              
+    
+    document.body.addEventListener("keyup", function(e) {
+        if (e.keyCode == 13) {
+            rec.stop();
+            exporter.parse( group, function ( gltf ) {
+                downloadJSON( gltf,"SoundSculpture" );
+            } );
+        }
+    });
+
+    //Take Screenshot
+    function takeScreenshot() {
+        var a = document.createElement('a');
+        renderer.render(scene, camera);
+        a.href = renderer.domElement.toDataURL().replace("image/png", "image/octet-stream");
+        a.download = 'SoundSculpture.png'
+        a.click();
+    }
+
+    //Rersponsiveness handler
+    window.addEventListener( 'resize', onWindowResize, false );
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+    }
+
+    //GLTF export on pressing Enter
+    var exporter = new GLTFExporter();
+    function downloadJSON(exportObj, exportName){
+        var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+        var downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href",     dataStr);
+        downloadAnchorNode.setAttribute("download", exportName + ".gltf");
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+    
+    //Random Function
+    function rnd() {
+     seed ^= seed << 13;
+     seed ^= seed >> 17;
+     seed ^= seed << 5;
+     return (((seed < 0) ? ~seed + 1 : seed) % 1000) / 1000;
+}
+</script>
