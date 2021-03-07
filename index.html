@@ -1,38 +1,37 @@
 <html>
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- PLEASE NO CHANGES BELOW THIS LINE (UNTIL I SAY SO) -->
-    <!--    <script language="javascript" type="text/javascript" src="lib/three.min.js"></script>-->
-
-    <!-- OK, YOU CAN MAKE CHANGES BELOW THIS LINE AGAIN -->
-    <link href="https://fonts.googleapis.com/css2?family=Muli:wght@300;900&display=swap" rel="stylesheet">
-    <style>
-        body {
-            padding: 0;
-            margin: 0;
-            height: 100%;
-            overflow: hidden;
-            text-align: center;
-        }
-
-    </style>
-</head>
-
-<body>
-    <div id="initScreen" style="position: absolute; width: 100%; height:100%; text-align: center;font-size: 30px;font-family: 'Muli'; color:#555555; cursor: pointer; padding-top: 20%; background-color: white; z-index: 100000">
-        Start</div>
-</body>
-
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link href="https://fonts.googleapis.com/css2?family=Muli:wght@300;900&display=swap" rel="stylesheet">
+        <style>
+            body {
+                padding: 0;
+                margin: 0;
+                height: 100%;
+                overflow: hidden;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+    </body>
 </html>
 <script type="module">
-    import * as THREE from './lib/three.module.js';
-    import { OrbitControls } from './lib/OrbitControls.js';
-    import { GLTFExporter } from './lib/GLTFExporter.js';
-    
-    let seed=217;
+
+    //Imports
+    import * as THREE from '/three.module.js';
+    import { OrbitControls } from '/OrbitControls.js';
+    import { GLTFExporter } from '/GLTFExporter.js';
+
+    //Initialize the seed value
+    let seed=7;
+    if (window.location.search != "/" && window.location.search != "")
+        seed=window.location.search.split("=")[1];
+    console.log(window.location.search);
+    var seedVal=seed;
+    console.log(seedVal);
+
+    //Define variables
     var volumeThreshold = 1;
     var values = 0;
     var average = 0;
@@ -49,12 +48,13 @@
     var maxSize=Math.floor(rnd()*200) + 250  ;
     var elementWidth=rnd()/2;
     var speed=0.1;
-    var radius=14;
-    var theta=(1/(count/2))*Math.PI-rnd()*14;
+    var radius=rnd()*14+5;
+    var theta=(1/(count/2))*Math.PI-rnd()*100;
     var sensitivity=0.1;
     var cumulative=true;
     var rec;
     var audioChunks=[];
+    var baseWidth=rnd()*20+5;
     let blob;
     var doOnce=false;
     var palette=["rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
@@ -63,19 +63,23 @@
                  "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
                  "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")",
                  "rgb("+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+", "+Math.floor(rnd()*255)+")"];
-   
+    if (seedVal==7)
+        palette[4]=0x880000;
+
     //Microphone initialisation and data processing
     for (var i = 0; i < count; i++) {
         storeArray[i] = 0.2;
     }
-    document.getElementById("initScreen").addEventListener('click', startNow);
+
+    setTimeout(() => {
+        startNow();
+    }, 1000);
+
     function startNow() {
-        document.getElementById("initScreen").style.display="none";
         navigator.getUserMedia = ( navigator.getUserMedia ||
                                   navigator.webkitGetUserMedia ||
                                   navigator.mozGetUserMedia ||
                                   navigator.msGetUserMedia);
-
         if (typeof navigator.mediaDevices.getUserMedia === 'undefined') {
             navigator.getUserMedia({
                 audio: true
@@ -111,7 +115,7 @@
                 var url = URL.createObjectURL(blob);
                 var a = document.createElement("a");
                 a.href = url;
-                a.download = "Audio.ogg";
+                a.download = "Audio_"+seedVal+".ogg";
                 a.click();
                 window.URL.revokeObjectURL(url);
             }
@@ -202,15 +206,15 @@
 
     //Diagonal Line
     var hrCylMat = new THREE.MeshLambertMaterial( {color: palette[3]} );
-    var hrCyl = new THREE.CylinderGeometry( 0.1, 0.1, 40, 18 );
+    var hrCyl = new THREE.CylinderGeometry( 0.1, 0.1, 44, 18 );
     var hr = new THREE.Mesh(hrCyl, hrCylMat);
     hr.castShadow = true;
-    hr.rotateZ( 0.2);
+    hr.rotateZ( rnd()*0.4-0.2);
     group.add(hr);
 
     //Table
     var tableMat = new THREE.MeshLambertMaterial( {color: palette[4]} );
-    var tableGeo = new THREE.CylinderGeometry( 30, 30, 2, 32);
+    var tableGeo = new THREE.CylinderGeometry( baseWidth, baseWidth, 1, 128);
     var table = new THREE.Mesh(tableGeo, tableMat);
     table.position.y=-21;
     table.receiveShadow=true;
@@ -238,8 +242,38 @@
         group.add(elements[i]);
 
     }
+
+    //Skybox
+    function createPathStrings(filename) {
+        const basePath = "./img/";
+        const baseFilename = basePath + filename;
+        const fileType = ".jpg";
+        const sides = ["ft", "bk", "up", "dn", "rt", "lf"];
+        const pathStings = sides.map(side => {
+            return baseFilename + "_" + side + fileType;
+        });
+        return pathStings;
+    }
+    let skyboxImage = "im";
+    function createMaterialArray(filename) {
+        const skyboxImagepaths = createPathStrings(filename);
+        const materialArray = skyboxImagepaths.map(image => {
+            let texture = new THREE.TextureLoader().load(image);
+
+            return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+        });
+        return materialArray;
+    }
+    const materialArray = createMaterialArray(skyboxImage);
+    var skyboxGeo = new THREE.BoxGeometry(10000, 10000, 10000);
+    var skybox = new THREE.Mesh(skyboxGeo, materialArray);
+    skybox.rotation.y=-0.65;
+    if (seedVal==7)
+        group.add(skybox);
+
+    //Add everything to scene
     scene.add(group);
-    
+
     //OrbitControls
     var controls = new OrbitControls( camera, renderer.domElement );
     controls.enableDamping = true; 
@@ -252,7 +286,7 @@
     controls.update();
 
     //Animate function
-    renderer.animate( () => {
+    renderer.setAnimationLoop( () => {
         for (var i = 0; i < count; i++) {
             if (i<count/2){
                 var rad = storeArray[i*2] * scale * speed + elements[i].scale.x * (1-speed);
@@ -269,13 +303,13 @@
         renderer.render(scene, camera);
     });
 
-              
-    
+    //Trigger on pressing Enter key
     document.body.addEventListener("keyup", function(e) {
         if (e.keyCode == 13) {
             rec.stop();
+            takeScreenshot();
             exporter.parse( group, function ( gltf ) {
-                downloadJSON( gltf,"SoundSculpture" );
+                downloadJSON( gltf,"Voxorium" );
             } );
         }
     });
@@ -285,16 +319,8 @@
         var a = document.createElement('a');
         renderer.render(scene, camera);
         a.href = renderer.domElement.toDataURL().replace("image/png", "image/octet-stream");
-        a.download = 'SoundSculpture.png'
+        a.download = 'Voxorium_'+seedVal+'.png'
         a.click();
-    }
-
-    //Rersponsiveness handler
-    window.addEventListener( 'resize', onWindowResize, false );
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize( window.innerWidth, window.innerHeight );
     }
 
     //GLTF export on pressing Enter
@@ -303,17 +329,25 @@
         var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
         var downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href",     dataStr);
-        downloadAnchorNode.setAttribute("download", exportName + ".gltf");
+        downloadAnchorNode.setAttribute("download", exportName+"_"+ seedVal + ".gltf");
         document.body.appendChild(downloadAnchorNode); // required for firefox
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
     }
-    
+
     //Random Function
     function rnd() {
-     seed ^= seed << 13;
-     seed ^= seed >> 17;
-     seed ^= seed << 5;
-     return (((seed < 0) ? ~seed + 1 : seed) % 1000) / 1000;
-}
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        return (((seed < 0) ? ~seed + 1 : seed) % 1000) / 1000;
+    }
+
+    //Responsiveness handler
+    window.addEventListener( 'resize', onWindowResize, false );
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+    }
 </script>
