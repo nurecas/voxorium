@@ -187,6 +187,8 @@
     directionalLight.shadow.mapSize.height = 512; 
     directionalLight.shadow.camera.near = 0.1;
     directionalLight.shadow.camera.far = 500;
+    directionalLight.shadowMapWidth = 2048;
+    directionalLight.shadowMapHeight = 2048;
     group.add(directionalLight);
     group.add(directionalLight.target);
     var d = 40;
