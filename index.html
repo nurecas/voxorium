@@ -310,9 +310,11 @@
         if (e.keyCode == 13) {
             rec.stop();
             takeScreenshot();
+            group.remove(skybox);
             exporter.parse( group, function ( gltf ) {
                 downloadJSON( gltf,"Voxorium" );
             } );
+            group.add(skybox);
         }
     });
 
